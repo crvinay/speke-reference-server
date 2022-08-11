@@ -57,10 +57,10 @@ class TestFileGenerator:
     key_period_id = "Key_Period_1"
     cpix_root = None
 
-    def generate_artifacts(self):
+    def generate_artifacts(self, is_vod_suite=False):
         self.cleanup_before_run()
         self.create_folders()
-        self.create_files()
+        self.create_files(is_vod_suite)
 
     def create_folders(self):
         if os.path.isdir(self.test_artifacts_folder_name):
@@ -73,7 +73,7 @@ class TestFileGenerator:
             except OSError as e:
                 print("Error: %s : %s" % (folder_to_create, e.strerror))
 
-    def create_files(self):
+    def create_files(self, is_vod_suite):
         for folder in self.test_case_folders:
             self.key_period_id = generate_random_key_period_id()
             if folder == utils.TEST_CASE_1_P_V_1_A_1:
@@ -99,7 +99,7 @@ class TestFileGenerator:
 
             for file in self.test_file_names:
                 key_ids = generate_key_id_list(self.num_keys)
-                self.generate_test_content(file, key_ids)
+                self.generate_test_content(file, key_ids, is_vod_suite)
                 self.generate_file(folder, file)
 
     def cleanup_before_run(self):
@@ -121,7 +121,7 @@ class TestFileGenerator:
         ET.indent(self.cpix_root, space="\t", level=0)
         ET.ElementTree(self.cpix_root).write(file_name_with_path, xml_declaration=True, encoding="utf-8")
 
-    def generate_test_content(self, file_name, key_ids):
+    def generate_test_content(self, file_name, key_ids, is_vod_suite):
         """
         Generate xml contents for different test cases
         """
@@ -171,8 +171,10 @@ class TestFileGenerator:
         self.generate_root()
         self.generate_content_key_list(key_ids)
         self.generate_drm_system_list(system_ids, key_ids)
-        self.generate_content_key_period_list()
-        self.generate_content_key_usage_rule_list(key_ids)
+        # See https://docs.aws.amazon.com/speke/latest/documentation/vod-workflow-method-v2.html for more details about VOD requests
+        if not is_vod_suite:
+            self.generate_content_key_period_list()
+        self.generate_content_key_usage_rule_list(key_ids, is_vod_suite)
 
     def generate_root(self):
         root_attribs = {"contentId": generate_random_content_id(), "version": "2.3"}
@@ -209,17 +211,17 @@ class TestFileGenerator:
         content_key_period_attribs = {"id": self.key_period_id, "index": "0"}
         ET.SubElement(content_key_period_list, ET.QName(ns["cpix"], "ContentKeyPeriod"), content_key_period_attribs)
 
-    def generate_content_key_usage_rule_list(self, key_ids):
+    def generate_content_key_usage_rule_list(self, key_ids, is_vod_suite):
         content_key_usage_rule_list = ET.SubElement(self.cpix_root, ET.QName(ns["cpix"], "ContentKeyUsageRuleList"))
         for num, k_id in enumerate(key_ids):
             content_key_usage_rule_attribs = {"kid": k_id, "intendedTrackType": self.intended_track_types[num]}
             content_key_usage_rule = ET.SubElement(content_key_usage_rule_list,
                                                    ET.QName(ns["cpix"], "ContentKeyUsageRule"),
                                                    content_key_usage_rule_attribs)
-
-            key_period_filter_attribs = {"periodId": self.key_period_id}
-            ET.SubElement(content_key_usage_rule, ET.QName(ns["cpix"], "KeyPeriodFilter"),
-                          key_period_filter_attribs)
+            if not is_vod_suite:
+                key_period_filter_attribs = {"periodId": self.key_period_id}
+                ET.SubElement(content_key_usage_rule, ET.QName(ns["cpix"], "KeyPeriodFilter"),
+                              key_period_filter_attribs)
 
             filter_name = "VideoFilter"
             if "AUDIO" in self.intended_track_types[num]:
